@@ -10,11 +10,18 @@ import os
 import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 
-DB_PATH = os.environ.get('DATABASE_PATH', os.path.join(os.path.dirname(__file__), 'agency.db'))
+
+def get_db_path():
+    """อ่าน DB path จาก env var ทุกครั้ง (กัน cache)"""
+    return os.environ.get('DATABASE_PATH', os.path.join(os.path.dirname(__file__), 'agency.db'))
+
+
+# Backward compat
+DB_PATH = get_db_path()
 
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(get_db_path())
     conn.row_factory = sqlite3.Row
     return conn
 

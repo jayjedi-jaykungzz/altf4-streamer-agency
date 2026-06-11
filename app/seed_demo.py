@@ -7,16 +7,16 @@ import random
 import datetime
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
-from models import init_db, get_db, SCOPE_TYPES
+from models import init_db, get_db, SCOPE_TYPES, get_db_path
 
-# ลบ DB เก่าเพื่อ seed ใหม่
-DB_PATH = os.path.join(os.path.dirname(__file__), 'agency.db')
+# ใช้ DB path จาก env var (Render: /tmp/agency.db, local: app/agency.db)
+DB_PATH = get_db_path()
 if os.path.exists(DB_PATH):
     os.remove(DB_PATH)
-    print('🗑️  Old DB removed')
+    print(f'🗑️  Old DB removed: {DB_PATH}')
 
 init_db()
-print('✅ DB initialized with scopes support')
+print(f'✅ DB initialized: {DB_PATH}')
 
 CLIENTS = [
     ('Nike Thailand', 'Endorsment คอลเลคชั่นใหม่'),
