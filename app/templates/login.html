@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}เข้าสู่ระบบ{% endblock %}
+{% block content %}
+<div class="login-card">
+    <img src="{{ url_for('static', filename='altf4-logo.png') }}" alt="ALTF4" class="login-logo">
+    <h1>ALTF4</h1>
+    <p class="subtitle">Streamer Agency Management</p>
+
+    <form method="POST" class="form">
+        <div class="form-group">
+            <label>ชื่อผู้ใช้</label>
+            <input type="text" name="username" required autofocus>
+        </div>
+        <div class="form-group">
+            <label>รหัสผ่าน</label>
+            <input type="password" name="password" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">เข้าสู่ระบบ</button>
+    </form>
+
+    <div class="hint">
+        <p><strong>ทดลองใช้:</strong></p>
+        <p>👑 Admin: <code>admin1</code> / <code>admin123</code></p>
+        <p>👑 Admin: <code>admin2</code> / <code>admin123</code></p>
+        <p>👤 Staff: <code>staff1</code> / <code>staff123</code></p>
+        <p>👤 Staff: <code>staff2</code> / <code>staff123</code></p>
+    </div>
+</div>
+{% endblock %}

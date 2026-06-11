@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+{% block title %}{{ project['name'] }}{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>{{ project['name'] }}</h1>
+    <div class="actions">
+        <a href="{{ url_for('public_report', project_id=project['id']) }}" target="_blank" class="btn btn-ghost">📊 ดูรายงานลูกค้า</a>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-ghost">← กลับ</a>
+    </div>
+</div>
+
+<div class="card">
+    <h2>🎥 สตรีมเมอร์ในโปรเจ็ค ({{ project['streamers']|length }} คน)</h2>
+    {% for s in project['streamers'] %}
+    <div class="streamer-detail">
+        <div class="streamer-detail-header">
+            <div>
+                <strong class="streamer-name-lg">{{ s['streamer_name'] }}</strong>
+                {% if current_user["role"] == "admin" %}
+                <span class="muted" style="margin-left: 0.5rem;">ต้นทุน ฿{{ "{:,.0f}".format(s['cost']) }}</span>
+                {% endif %}
+            </div>
+            <a href="{{ url_for('stat_new', project_id=project['id']) }}?ps={{ s['id'] }}" class="btn btn-sm">📤 กรอก Stat</a>
+        </div>
+        {% if s['scopes'] %}
+        <div class="scope-tags">
+            {% for sc in s['scopes'] %}
+            <span class="scope-tag">
+                <span class="scope-icon">
+                    {% if sc['scope_type'] == 'Livestream' %}📡
+                    {% elif sc['scope_type'] == 'Short VDO' %}🎬
+                    {% elif sc['scope_type'] == 'Long VDO' %}🎞️
+                    {% elif sc['scope_type'] == 'Post Promote' %}📢
+                    {% elif sc['scope_type'] == 'Event Offline' %}📍
+                    {% elif sc['scope_type'] == 'Reels' %}📱
+                    {% elif sc['scope_type'] == 'Story' %}📸
+                    {% elif sc['scope_type'] == 'Podcast' %}🎙️
+                    {% elif sc['scope_type'] == 'Review' %}⭐
+                    {% elif sc['scope_type'] == 'Unboxing' %}📦
+                    {% else %}🔹{% endif %}
+                </span>
+                {{ sc['scope_type'] }} × <strong>{{ sc['scope_count'] }}</strong>
+                {% if current_user["role"] == "admin" %}
+                    @ ฿{{ "{:,.0f}".format(sc['cost_per_unit']) }}/ครั้ง
+                    = <strong>฿{{ "{:,.0f}".format(sc['cost_per_unit'] * sc['scope_count']) }}</strong>
+                {% endif %}
+            </span>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="muted" style="font-size: 0.85rem;">ไม่มี Scope of Work</p>
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% if current_user["role"] == "admin" %}
+    <div class="total-row-styler">
+        <strong>ต้นทุนรวม</strong>
+        <strong>฿{{ "{:,.2f}".format(project['total_cost']) }}</strong>
+    </div>
+    {% endif %}
+</div>
+
+{% if current_user["role"] == "admin" %}
+<div class="card no-print">
+    <h2>📄 ใบเสนอราคา (Quotation)</h2>
+    <button onclick="window.print()" class="btn btn-primary">🖨️ พิมพ์ใบเสนอราคา</button>
+</div>
+
+<div class="quote-sheet" id="quoteSheet">
+    <div class="quote-header">
+        <div>
+            <h2>ใบเสนอราคา</h2>
+            <p class="muted">QUOTATION</p>
+        </div>
+        <div class="quote-meta">
+            <p><strong>เลขที่:</strong> QT-{{ "%06d"|format(project['id']) }}</p>
+            <p><strong>วันที่:</strong> {{ project['created_at'][:10] }}</p>
+        </div>
+    </div>
+
+    <table class="quote-table">
+        <thead>
+            <tr>
+                <th>ลูกค้า</th>
+                <th>สตรีมเมอร์</th>
+                <th>Scope of Work</th>
+                <th style="text-align:center">จำนวน</th>
+                <th style="text-align:right">ราคา/หน่วย</th>
+                <th style="text-align:right">ราคาขาย</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in project['streamers'] %}
+                {% set outer_loop = loop %}
+                {% for sc in s['scopes'] %}
+                {% set unit_sale = sc['cost_per_unit'] * (1 + project['agency_fee_percent']/100) %}
+                {% set total_sale = unit_sale * sc['scope_count'] %}
+                <tr>
+                    <td>{% if loop.first and outer_loop.first %}<strong>{{ project['client_name'] }}</strong>{% endif %}</td>
+                    <td>{% if loop.first %}<strong>{{ s['streamer_name'] }}</strong>{% else %}<span class="muted" style="font-size:0.85em">↑</span>{% endif %}</td>
+                    <td>{{ sc['scope_type'] }}</td>
+                    <td style="text-align:center">× {{ sc['scope_count'] }}</td>
+                    <td style="text-align:right">฿{{ "{:,.2f}".format(unit_sale) }}</td>
+                    <td style="text-align:right"><strong>฿{{ "{:,.2f}".format(total_sale) }}</strong></td>
+                </tr>
+                {% endfor %}
+                {# ถ้า streamer ไม่มี scope ให้แสดงบรรทัดรวม #}
+                {% if not s['scopes'] %}
+                {% set streamer_sale = s['cost'] * (1 + project['agency_fee_percent']/100) %}
+                <tr>
+                    <td>{% if outer_loop.first %}<strong>{{ project['client_name'] }}</strong>{% endif %}</td>
+                    <td><strong>{{ s['streamer_name'] }}</strong></td>
+                    <td colspan="3" class="muted">ไม่มี Scope of Work</td>
+                    <td style="text-align:right"><strong>฿{{ "{:,.2f}".format(streamer_sale) }}</strong></td>
+                </tr>
+                {% endif %}
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td colspan="5" style="text-align:right"><strong>ราคารวมทั้งสิ้น</strong></td>
+                <td style="text-align:right">
+                    <strong>
+                    {% set total_sale = project['sale_price_override'] or (project['total_cost'] * (1 + project['agency_fee_percent']/100)) %}
+                    ฿{{ "{:,.2f}".format(total_sale) }}
+                    </strong>
+                </td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <div class="quote-summary">
+        <p><strong>ต้นทุนรวม:</strong> ฿{{ "{:,.2f}".format(project['total_cost']) }} | <strong>Agency Fee {{ project['agency_fee_percent'] }}%:</strong> ฿{{ "{:,.2f}".format(project['total_cost'] * project['agency_fee_percent'] / 100) }} | <strong>ราคาขาย:</strong> ฿{{ "{:,.2f}".format(project['sale_price_override'] or (project['total_cost'] * (1 + project['agency_fee_percent']/100))) }}</p>
+    </div>
+
+    <div class="quote-footer">
+        <p>ใบเสนอราคานี้มีอายุ 15 วัน นับจากวันที่ออกเอกสาร</p>
+        <div class="signature">
+            <div class="sig-box">
+                <p>ผู้เสนอราคา</p>
+                <div class="sig-line"></div>
+                <p>Streamer Agency</p>
+            </div>
+            <div class="sig-box">
+                <p>ผู้อนุมัติ</p>
+                <div class="sig-line"></div>
+                <p>{{ project['client_name'] }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card no-print">
+    <h2>✏️ แก้ไขราคาขาย (กรณีต่อรอง)</h2>
+    {% set current_price = project['sale_price_override'] or (project['total_cost'] * (1 + project['agency_fee_percent']/100)) %}
+    <form method="POST" action="{{ url_for('project_update_price', project_id=project['id']) }}" class="form-inline">
+        <input type="number" name="sale_price" step="0.01" value="{{ current_price }}" required>
+        <button type="submit" class="btn btn-primary">อัพเดท</button>
+    </form>
+</div>
+{% endif %}
+
+<div class="card no-print">
+    <h2>🔄 อัพเดทสถานะ</h2>
+    <form method="POST" action="{{ url_for('project_update_status', project_id=project['id']) }}" class="form-inline">
+        <select name="status">
+            {% for code in STATUS_CODES %}
+            <option value="{{ code }}" {% if project['status'] == code %}selected{% endif %}>{{ STATUS_LABELS[code] }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary">อัพเดท</button>
+    </form>
+</div>
+
+<div class="card no-print">
+    <h2>📊 Stat Reports ({{ stats|length }})</h2>
+    {% if stats %}
+    {% for s in stats %}
+    <div class="stat-report">
+        <div class="stat-header">
+            <strong>
+                {{ s['streamer_name'] }}
+                {% if s.get('scope_type') %}
+                    <span class="scope-pill">× {{ s['scope_type'] }}{% if s.get('scope_count') %} ({{ s['scope_count'] }}){% endif %}</span>
+                {% endif %}
+                <span class="muted" style="font-weight: 400; font-size: 0.85rem;">• {{ s['platform'] }}</span>
+            </strong>
+            <div>
+                <span class="muted">{{ s['submitted_at'][:16] }} • โดย {{ s['submitter_name'] }}</span>
+                <form method="POST" action="{{ url_for('stat_delete', stat_id=s['id']) }}" style="display:inline" onsubmit="return confirm('ลบรายงานนี้?')">
+                    <button type="submit" class="btn btn-sm btn-ghost" style="color:var(--danger)">🗑️</button>
+                </form>
+            </div>
+        </div>
+        <div class="stat-numbers">
+            <div><strong>{{ "{:,}".format(s['views']) }}</strong><br><small>Views</small></div>
+            <div><strong>{{ "{:,}".format(s['likes']) }}</strong><br><small>Likes</small></div>
+            <div><strong>{{ "{:,}".format(s['shares']) }}</strong><br><small>Shares</small></div>
+            <div><strong>{{ "{:,}".format(s['comments']) }}</strong><br><small>Comments</small></div>
+            <div><strong>{{ '%.1f' % s['engagement'] }}%</strong><br><small>Engagement</small></div>
+        </div>
+        {% if s['extra_data'] %}<p class="muted">📝 {{ s['extra_data'] }}</p>{% endif %}
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="empty">ยังไม่มีรายงาน stat</p>
+    {% endif %}
+</div>
+
+<style>
+.total-row { background: #f5f5f7; }
+.total-row td { font-size: 1.05rem; }
+
+.streamer-detail {
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--border-soft);
+}
+.streamer-detail:last-of-type { border-bottom: none; }
+
+.streamer-detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    gap: 0.5rem;
+}
+
+.streamer-name-lg {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.scope-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+}
+
+.scope-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 4px 10px;
+    background: var(--bg-2);
+    border: 1px solid var(--border-soft);
+    border-radius: 980px;
+    font-size: 0.82rem;
+    color: var(--text-2);
+}
+.scope-icon { font-size: 0.95rem; }
+.scope-tag strong { color: var(--text); }
+
+.scope-pill {
+    display: inline-block;
+    background: rgba(212, 255, 0, 0.4);
+    color: var(--text);
+    padding: 2px 8px;
+    border-radius: 980px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+}
+
+.total-row-styler {
+    display: flex;
+    justify-content: space-between;
+    padding: 1rem 0 0;
+    margin-top: 1rem;
+    border-top: 2px solid var(--text);
+    font-size: 1.1rem;
+}
+
+.quote-summary {
+    margin: 1rem 0;
+    padding: 0.85rem 1rem;
+    background: var(--bg-2);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-soft);
+    font-size: 0.88rem;
+}
+.quote-summary p { margin: 0; color: var(--text-2); }
+.quote-summary strong { color: var(--text); }
+
+@media print {
+    .navbar, .footer, .no-print, .page-header .actions a:not(.btn-primary) { display: none !important; }
+    .quote-sheet { box-shadow: none; border: 1px solid #000; }
+}
+</style>
+{% endblock %}

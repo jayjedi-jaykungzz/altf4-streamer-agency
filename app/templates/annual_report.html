@@ -1,0 +1,389 @@
+{% extends "base.html" %}
+{% block title %}สรุปประจำปี {{ selected_year }} - ALTF4{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>📊 สรุปผลประกอบการประจำปี {{ selected_year }}</h1>
+    <div class="actions">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-ghost">← กลับ</a>
+        {% if current_user["role"] == "admin" %}
+        <a href="{{ url_for('admin_auto_cancel') }}" class="btn btn-ghost" onclick="return confirm('ยกเลิกอัตโนมัติ โปรเจคเสนอราคาที่ค้างเกิน 5 เดือน?')">⏰ Auto-Cancel เก่า</a>
+        {% endif %}
+        <button onclick="window.print()" class="btn btn-primary">🖨️ พิมพ์รายงาน</button>
+    </div>
+</div>
+
+<!-- Year selector -->
+<div class="card filter-bar">
+    <form method="GET" class="filter-form">
+        <div class="filter-group">
+            <label>📅 เลือกปี</label>
+            <select name="year" onchange="this.form.submit()">
+                {% for y in years %}
+                <option value="{{ y }}" {% if y == selected_year|string %}selected{% endif %}>{{ y }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+</div>
+
+{% if report.project_count == 0 %}
+<div class="card">
+    <p class="muted" style="text-align:center; padding: 3rem;">ไม่มีโปรเจคที่นับรวมในผลประกอบการปี {{ selected_year }}<br>
+    <small>(นับเฉพาะสถานะ "ดำเนินงาน" และ "เสร็จสิ้น" เท่านั้น — ไม่รวม "เสนอราคา" และ "ยกเลิก")</small></p>
+</div>
+{% else %}
+
+<div class="card filter-notice" style="background: var(--bg-2);">
+    <p class="muted" style="margin: 0; font-size: 0.88rem;">
+        ℹ️ <strong>เกณฑ์การคำนวน:</strong> นับเฉพาะโปรเจคสถานะ "ดำเนินงาน" + "เสร็จสิ้น" — ไม่รวม "เสนอราคา" และ "ยกเลิก" เพราะยังไม่ใช่รายได้จริง
+        {% if report.get('total_projects_all_status', 0) > report.project_count %}
+        <br>📊 โปรเจคทั้งหมดในปี {{ selected_year }}: <strong>{{ report.total_projects_all_status }}</strong> โปรเจค (นับรวมเสนอราคา/ยกเลิก {{ report.total_projects_all_status - report.project_count }} โปรเจคที่ไม่นำมาคำนวน)
+        {% endif %}
+    </p>
+</div>
+
+<!-- ===== Top KPI ===== -->
+<div class="kpi-grid">
+    <div class="kpi-card kpi-primary">
+        <div class="kpi-value">{{ report.project_count }}</div>
+        <div class="kpi-label">โปรเจค</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">฿{{ "{:,.0f}".format(report.total_revenue) }}</div>
+        <div class="kpi-label">รายได้รวม</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">฿{{ "{:,.0f}".format(report.total_cost) }}</div>
+        <div class="kpi-label">ต้นทุนรวม</div>
+    </div>
+    <div class="kpi-card {% if report.total_profit >= 0 %}kpi-profit{% else %}kpi-loss{% endif %}">
+        <div class="kpi-value">฿{{ "{:,.0f}".format(report.total_profit) }}</div>
+        <div class="kpi-label">กำไรสุทธิ ({{ "%.1f"|format(report.profit_margin) }}%)</div>
+    </div>
+</div>
+
+<!-- ===== P&L Statement ===== -->
+<div class="card">
+    <h2>💼 งบกำไรขาดทุน (Profit & Loss Statement) ปี {{ selected_year }}</h2>
+    <table class="pl-table">
+        <tbody>
+            <tr>
+                <td>📥 <strong>รายได้จากการขาย (Revenue)</strong></td>
+                <td class="num">฿{{ "{:,.2f}".format(report.total_revenue) }}</td>
+            </tr>
+            <tr>
+                <td>📤 <strong>หัก ต้นทุนขาย (Cost of Sales)</strong></td>
+                <td class="num negative">({{ "{:,.2f}".format(report.total_cost) }})</td>
+            </tr>
+            <tr class="pl-total">
+                <td><strong>💰 กำไรขั้นต้น (Gross Profit)</strong></td>
+                <td class="num">฿{{ "{:,.2f}".format(report.total_revenue - report.total_cost) }}</td>
+            </tr>
+            <tr>
+                <td style="padding-left: 2rem; color: var(--muted);">↳ อัตรากำไรขั้นต้น (Gross Margin)</td>
+                <td class="num" style="color: var(--muted);">
+                    {% if report.total_revenue > 0 %}
+                    {{ "%.1f"|format((report.total_revenue - report.total_cost) / report.total_revenue * 100) }}%
+                    {% else %}0%{% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td style="padding-left: 2rem; color: var(--muted);">↳ จำนวนโปรเจคทั้งหมด</td>
+                <td class="num" style="color: var(--muted);">{{ report.project_count }} โปรเจค</td>
+            </tr>
+            <tr>
+                <td style="padding-left: 2rem; color: var(--muted);">↳ ค่าเฉลี่ยกำไร/โปรเจค</td>
+                <td class="num" style="color: var(--muted);">฿{{ "{:,.0f}".format((report.total_revenue - report.total_cost) / report.project_count) if report.project_count else 0 }}</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- ===== Breakdown by Status ===== -->
+<div class="card">
+    <h2>📊 ผลประกอบการแยกตามสถานะโปรเจค</h2>
+    <div class="status-grid">
+        {% for code in STATUS_CODES %}
+        {% set s = report.by_status.get(code, {}) %}
+        <div class="status-box status-{{ code }}">
+            <div class="status-box-header">
+                {% if code == 'pending' %}📋
+                {% elif code == 'in_progress' %}🔄
+                {% elif code == 'completed' %}✅
+                {% elif code == 'cancelled' %}❌
+                {% endif %}
+                {{ STATUS_LABELS[code] }}
+            </div>
+            <div class="status-box-count">{{ s.get('count', 0) }} โปรเจค</div>
+            <div class="status-box-stats">
+                <div><span>รายได้:</span> <strong>฿{{ "{:,.0f}".format(s.get('revenue', 0)) }}</strong></div>
+                <div><span>ต้นทุน:</span> ฿{{ "{:,.0f}".format(s.get('cost', 0)) }}</div>
+                <div><span>กำไร:</span> <strong>฿{{ "{:,.0f}".format(s.get('profit', 0)) }}</strong></div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- ===== Breakdown by Streamer ===== -->
+<div class="card">
+    <h2>🎥 วิเคราะห์ผลประกอบการแยกตามสตรีมเมอร์</h2>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>สตรีมเมอร์</th>
+                    <th style="text-align:center">โปรเจค</th>
+                    <th style="text-align:center">Scopes</th>
+                    <th style="text-align:right">รายได้</th>
+                    <th style="text-align:right">ต้นทุน</th>
+                    <th style="text-align:right">กำไร</th>
+                    <th style="text-align:right">Margin</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sname, data in report.top_streamers %}
+                <tr>
+                    <td>
+                        <strong>{{ sname }}</strong>
+                        {% if loop.index <= 3 %}
+                            <span class="rank-badge rank-{{ loop.index }}">#{{ loop.index }}</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align:center">{{ data.project_count }}</td>
+                    <td style="text-align:center">{{ data.scope_count }}</td>
+                    <td style="text-align:right">฿{{ "{:,.0f}".format(data.revenue) }}</td>
+                    <td style="text-align:right">฿{{ "{:,.0f}".format(data.cost) }}</td>
+                    <td style="text-align:right" class="{% if data.profit >= 0 %}profit-pos{% else %}profit-neg{% endif %}">
+                        <strong>฿{{ "{:,.0f}".format(data.profit) }}</strong>
+                    </td>
+                    <td style="text-align:right">
+                        {% if data.revenue > 0 %}
+                        <strong class="{% if data.profit >= 0 %}profit-pos{% else %}profit-neg{% endif %}">
+                            {{ "%.1f"|format((data.profit / data.revenue) * 100) }}%
+                        </strong>
+                        {% else %}-{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ===== Per-Streamer Project Breakdown ===== -->
+<div class="card">
+    <h2>🏢 รายละเอียดงานของแต่ละสตรีมเมอร์ (แยกตามโปรเจค/ลูกค้า)</h2>
+    <p class="muted" style="margin-bottom: 1rem;">ดูว่าสตรีมเมอร์แต่ละคนได้งานจากลูกค้าเจ้าไหนบ้าง และแต่ละโปรเจคทำกำไรได้เท่าไหร่</p>
+    {% for sname, projects in report.by_streamer_project.items() %}
+    <details class="streamer-scope" {% if loop.first %}open{% endif %}>
+        <summary>
+            <strong>{{ sname }}</strong>
+            <span class="muted">— {{ projects|length }} โปรเจค</span>
+            <span class="muted" style="float: right;">
+                กำไรรวม: <strong style="color: #248a3d;">฿{{ "{:,.0f}".format(projects|sum(attribute='profit')) }}</strong>
+            </span>
+        </summary>
+        <table class="table inner-table">
+            <thead>
+                <tr>
+                    <th>โปรเจค</th>
+                    <th>ลูกค้า</th>
+                    <th>Scope of Work</th>
+                    <th style="text-align:center">จำนวน</th>
+                    <th style="text-align:right">รายได้</th>
+                    <th style="text-align:right">ต้นทุน</th>
+                    <th style="text-align:right">กำไร</th>
+                    <th style="text-align:right">Margin</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for proj in projects %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('project_detail', project_id=proj['project_id']) }}" class="link-primary">
+                            <strong>{{ proj['project_name'] }}</strong>
+                        </a>
+                        <br>
+                        <span class="status-pill status-{{ proj['status'] }}">{{ STATUS_LABELS[proj['status']] }}</span>
+                    </td>
+                    <td>{{ proj['client_name'] }}</td>
+                    <td>
+                        <small class="muted" style="font-size: 0.78rem; line-height: 1.4;">
+                            {{ proj['scope_summary_str'] }}
+                        </small>
+                    </td>
+                    <td style="text-align:center">{{ proj['scope_count'] }}</td>
+                    <td style="text-align:right">฿{{ "{:,.0f}".format(proj['revenue']) }}</td>
+                    <td style="text-align:right">฿{{ "{:,.0f}".format(proj['cost']) }}</td>
+                    <td style="text-align:right" class="{% if proj['profit'] >= 0 %}profit-pos{% else %}profit-neg{% endif %}">
+                        <strong>฿{{ "{:,.0f}".format(proj['profit']) }}</strong>
+                    </td>
+                    <td style="text-align:right" class="{% if proj['profit'] >= 0 %}profit-pos{% else %}profit-neg{% endif %}">
+                        {% if proj['revenue'] > 0 %}{{ "%.1f"|format((proj['profit'] / proj['revenue']) * 100) }}%{% else %}-{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </details>
+    {% endfor %}
+</div>
+
+<!-- ===== By Client ===== -->
+<div class="card">
+    <h2>🏢 วิเคราะห์ตามลูกค้า (Top 10)</h2>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ลูกค้า</th>
+                    <th style="text-align:center">โปรเจค</th>
+                    <th style="text-align:right">รายได้</th>
+                    <th style="text-align:right">ต้นทุน</th>
+                    <th style="text-align:right">กำไร</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cname, data in report.top_clients[:10] %}
+                <tr>
+                    <td><strong>{{ cname }}</strong></td>
+                    <td style="text-align:center">{{ data.project_count }}</td>
+                    <td style="text-align:right">฿{{ "{:,.0f}".format(data.revenue) }}</td>
+                    <td style="text-align:right">฿{{ "{:,.0f}".format(data.cost) }}</td>
+                    <td style="text-align:right" class="{% if data.profit >= 0 %}profit-pos{% else %}profit-neg{% endif %}">
+                        <strong>฿{{ "{:,.0f}".format(data.profit) }}</strong>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ===== Monthly Trend ===== -->
+{% if report.monthly %}
+<div class="card">
+    <h2>📈 แนวโน้มรายเดือน</h2>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>เดือน</th>
+                <th style="text-align:center">โปรเจค</th>
+                <th style="text-align:right">รายได้</th>
+                <th style="text-align:right">ต้นทุน</th>
+                <th style="text-align:right">กำไร</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for month, data in report.monthly.items()|sort %}
+            <tr>
+                <td><strong>{{ month }}</strong></td>
+                <td style="text-align:center">{{ data.project_count }}</td>
+                <td style="text-align:right">฿{{ "{:,.0f}".format(data.revenue) }}</td>
+                <td style="text-align:right">฿{{ "{:,.0f}".format(data.cost) }}</td>
+                <td style="text-align:right" class="{% if data.profit >= 0 %}profit-pos{% else %}profit-neg{% endif %}">
+                    <strong>฿{{ "{:,.0f}".format(data.profit) }}</strong>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% endif %}
+
+<style>
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+.kpi-card {
+    background: var(--card);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    text-align: center;
+    transition: transform 0.2s;
+}
+.kpi-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+.kpi-primary { background: var(--gradient-accent); color: var(--text); }
+.kpi-profit { background: linear-gradient(135deg, rgba(52, 199, 89, 0.1), rgba(52, 199, 89, 0.04)); border-color: rgba(52, 199, 89, 0.3); }
+.kpi-loss { background: linear-gradient(135deg, rgba(255, 59, 48, 0.1), rgba(255, 59, 48, 0.04)); border-color: rgba(255, 59, 48, 0.3); }
+.kpi-value { font-size: 1.85rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+.kpi-label { font-size: 0.82rem; color: var(--muted); margin-top: 0.3rem; font-weight: 600; }
+.kpi-primary .kpi-label { color: var(--text-2); }
+
+.pl-table { width: 100%; border-collapse: collapse; }
+.pl-table td { padding: 0.85rem 0.5rem; border-bottom: 1px solid var(--border-soft); }
+.pl-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.pl-table .num.negative { color: #d70015; }
+.pl-table tr.pl-total td { border-top: 2px solid var(--text); border-bottom: 2px solid var(--text); font-size: 1.1rem; padding: 1rem 0.5rem; }
+.pl-table tr.pl-total .num { color: var(--text); }
+
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+.status-box {
+    background: var(--bg-2);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    border: 1px solid var(--border-soft);
+    border-left: 4px solid transparent;
+}
+.status-box.status-pending { border-left-color: #86868b; }
+.status-box.status-in_progress { border-left-color: #0066cc; }
+.status-box.status-completed { border-left-color: #34c759; }
+.status-box.status-cancelled { border-left-color: #ff3b30; }
+.status-box-header { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.25rem; }
+.status-box-count { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.75rem; }
+.status-box-stats { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.88rem; }
+.status-box-stats div { display: flex; justify-content: space-between; }
+.status-box-stats span { color: var(--text-2); }
+
+.rank-badge {
+    display: inline-block;
+    background: var(--accent);
+    color: var(--text);
+    padding: 1px 8px;
+    border-radius: 980px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+}
+.rank-1 { background: linear-gradient(135deg, #FFD700, #FFA500); color: #5a4500; }
+.rank-2 { background: linear-gradient(135deg, #C0C0C0, #A0A0A0); color: #2a2a2a; }
+.rank-3 { background: linear-gradient(135deg, #CD7F32, #8B5A2B); color: #fff; }
+
+.profit-pos { color: #248a3d; }
+.profit-neg { color: #d70015; }
+
+.streamer-scope {
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem 1rem;
+    background: var(--bg-2);
+}
+.streamer-scope summary {
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0.25rem 0;
+    list-style: none;
+}
+.streamer-scope summary::before { content: '▶ '; color: var(--muted); font-size: 0.7rem; }
+.streamer-scope[open] summary::before { content: '▼ '; }
+.inner-table { margin-top: 0.5rem; background: var(--card); }
+
+@media print {
+    .filter-bar, .actions, .navbar, .footer { display: none !important; }
+    .kpi-card, .card { break-inside: avoid; }
+}
+</style>
+{% endblock %}

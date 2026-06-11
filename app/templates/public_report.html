@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ project['name'] }} - ALTF4 Report</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='altf4-logo.png') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        (function() {
+            const saved = localStorage.getItem('altf4-theme');
+            if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        })();
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #f5f5f7; --card: #ffffff; --text: #1d1d1f; --text-2: #424245;
+            --muted: #86868b; --border: #d2d2d7; --border-soft: #e8e8ed;
+            --accent: #d4ff00; --accent-dark: #a8cc00;
+            --gradient-bg: linear-gradient(135deg, #f5f5f7 0%, #e8e8ed 100%);
+        }
+        [data-theme="dark"] {
+            --bg: #000000; --card: #1c1c1e; --text: #f5f5f7; --text-2: #d1d1d6;
+            --muted: #8e8e93; --border: #38383a; --border-soft: #2c2c2e;
+            --gradient-bg: linear-gradient(135deg, #1c1c1e 0%, #000000 100%);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+            background: var(--gradient-bg);
+            color: var(--text);
+            line-height: 1.5;
+            min-height: 100vh;
+            padding: 2rem 1rem;
+            transition: background 0.3s, color 0.3s;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header {
+            text-align: center;
+            padding: 3rem 2rem;
+            background: var(--card);
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+            margin-bottom: 2rem;
+        }
+        .header h1 {
+            font-size: clamp(1.75rem, 5vw, 3rem);
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            background: linear-gradient(180deg, #1d1d1f 0%, #424245 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header .client { color: #86868b; font-size: 1.1rem; margin-top: 0.5rem; }
+        .badge {
+            display: inline-block;
+            padding: 0.4rem 1.2rem;
+            border-radius: 980px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-top: 1rem;
+        }
+        .badge-completed { background: #d4edda; color: #155724; }
+        .badge-in_progress { background: #cce5ff; color: #004085; }
+        .badge-pending { background: #fff3cd; color: #856404; }
+        .badge-cancelled { background: #f8d7da; color: #721c24; }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .kpi {
+            background: var(--card);
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .kpi::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #0071e3, #5e5ce6);
+        }
+        .kpi-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--text);
+            line-height: 1;
+        }
+        .kpi-label {
+            color: var(--muted);
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.4rem 1.2rem;
+            border-radius: 980px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-top: 1rem;
+        }
+        .badge-completed { background: var(--status-completed-bg); color: var(--status-completed-color); }
+        .badge-in_progress { background: var(--status-in_progress-bg); color: var(--status-in_progress-color); }
+        .badge-pending { background: var(--status-pending-bg); color: var(--status-pending-color); }
+        .badge-cancelled { background: var(--status-cancelled-bg); color: var(--status-cancelled-color); }
+
+        .chart-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        @media (max-width: 768px) { .chart-grid { grid-template-columns: 1fr; } }
+        .chart-card {
+            background: var(--card);
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+        }
+        .chart-card h3 {
+            font-size: 1.05rem;
+            margin-bottom: 1rem;
+            color: #1d1d1f;
+        }
+        .chart-wrapper { position: relative; height: 300px; }
+
+        .section {
+            background: var(--card);
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+            margin-bottom: 1.5rem;
+        }
+        .section h2 {
+            font-size: 1.4rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .streamer-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .streamer-table th, .streamer-table td {
+            padding: 0.85rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid #d2d2d7;
+        }
+        .streamer-table th {
+            font-size: 0.75rem;
+            color: #86868b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .streamer-table td:first-child { font-weight: 600; }
+
+        .platform-tag {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 980px;
+            font-size: 0.75rem;
+            background: #f0f4ff;
+            color: #0066cc;
+            margin-right: 4px;
+        }
+        [data-theme="dark"] .platform-tag {
+            background: rgba(0, 113, 227, 0.2);
+            color: #66b3ff;
+        }
+
+        .footer-note {
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.85rem;
+            margin-top: 3rem;
+        }
+
+        .actions {
+            text-align: center;
+            margin: 1rem 0 2rem;
+        }
+        .btn-print {
+            background: var(--text);
+            color: var(--bg);
+            padding: 0.6rem 1.5rem;
+            border: none;
+            border-radius: 980px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: 600;
+        }
+        @media print {
+            body { background: white; }
+            .actions { display: none; }
+            .section, .chart-card, .kpi { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <div class="header">
+        <img src="{{ url_for('static', filename='altf4-logo.png') }}" alt="ALTF4" style="height: 80px; margin-bottom: 1rem;">
+        <div style="font-weight: 700; font-size: 1.5rem; color: var(--text); letter-spacing: 0.05em; margin-bottom: 0.5rem;">ALTF4</div>
+        <h1>{{ project['name'] }}</h1>
+        <p class="client">📢 {{ project['client_name'] }}</p>
+        <div class="badge badge-{{ project['status'] }}">{{ project['status'].upper() }}</div>
+        <p style="color: #86868b; font-size: 0.85rem; margin-top: 0.5rem;">
+            📅 {{ project['created_at'][:10] }} • 🎥 {{ project['streamers']|length }} สตรีมเมอร์
+        </p>
+    </div>
+
+    <div class="actions">
+        <button class="btn-print" onclick="window.print()">🖨️ พิมพ์ / บันทึก PDF</button>
+    </div>
+
+    {% if agg %}
+    <div class="kpi-grid">
+        <div class="kpi">
+            <div class="kpi-value">{{ "{:,}".format(agg['total_views']) }}</div>
+            <div class="kpi-label">👁️ Views รวม</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-value">{{ "{:,}".format(agg['total_likes']) }}</div>
+            <div class="kpi-label">❤️ Likes รวม</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-value">{{ "{:,}".format(agg['total_shares']) }}</div>
+            <div class="kpi-label">🔄 Shares รวม</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-value">{{ "{:,}".format(agg['total_comments']) }}</div>
+            <div class="kpi-label">💬 Comments รวม</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-value">{{ '%.1f' % agg['avg_engagement'] }}%</div>
+            <div class="kpi-label">📊 Engagement เฉลี่ย</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-value">{{ agg['platforms']|length }}</div>
+            <div class="kpi-label">🌐 แพลตฟอร์ม</div>
+        </div>
+    </div>
+
+    <div class="chart-grid">
+        <div class="chart-card">
+            <h3>📊 เปรียบเทียบ Engagement ตามแพลตฟอร์ม</h3>
+            <div class="chart-wrapper">
+                <canvas id="platformChart"></canvas>
+            </div>
+        </div>
+        <div class="chart-card">
+            <h3>🥧 สัดส่วน Views ตามแพลตฟอร์ม</h3>
+            <div class="chart-wrapper">
+                <canvas id="viewsPieChart"></canvas>
+            </div>
+        </div>
+        <div class="chart-card">
+            <h3>👥 Views ต่อสตรีมเมอร์</h3>
+            <div class="chart-wrapper">
+                <canvas id="streamerChart"></canvas>
+            </div>
+        </div>
+        <div class="chart-card">
+            <h3>📋 Views แยกตาม Scope of Work</h3>
+            <div class="chart-wrapper">
+                <canvas id="scopeChart"></canvas>
+            </div>
+        </div>
+        <div class="chart-card" style="grid-column: 1 / -1;">
+            <h3>📈 Engagement Metrics (รวมทุกแพลตฟอร์ม)</h3>
+            <div class="chart-wrapper">
+                <canvas id="metricsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    {% if agg.get('by_scope') %}
+    <div class="section">
+        <h2>📋 สรุปตาม Scope of Work</h2>
+        <table class="streamer-table">
+            <thead>
+                <tr>
+                    <th>Scope</th>
+                    <th style="text-align:right">Views</th>
+                    <th style="text-align:right">Likes</th>
+                    <th style="text-align:right">Shares</th>
+                    <th style="text-align:right">Comments</th>
+                    <th style="text-align:right">Reports</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for scope, data in agg['by_scope'].items() %}
+                <tr>
+                    <td><strong>{{ scope }}</strong></td>
+                    <td style="text-align:right"><strong>{{ "{:,}".format(data['views']) }}</strong></td>
+                    <td style="text-align:right">{{ "{:,}".format(data['likes']) }}</td>
+                    <td style="text-align:right">{{ "{:,}".format(data['shares']) }}</td>
+                    <td style="text-align:right">{{ "{:,}".format(data['comments']) }}</td>
+                    <td style="text-align:right">{{ data['count'] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <div class="section">
+        <h2>👥 ผลงานรายสตรีมเมอร์</h2>
+        <table class="streamer-table">
+            <thead>
+                <tr>
+                    <th>สตรีมเมอร์</th>
+                    <th>แพลตฟอร์ม</th>
+                    <th style="text-align:right">Views</th>
+                    <th style="text-align:right">Likes</th>
+                    <th style="text-align:right">Shares</th>
+                    <th style="text-align:right">Comments</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for name, data in agg['by_streamer'].items() %}
+                <tr>
+                    <td>{{ name }}</td>
+                    <td>
+                        {% for p in data['platforms'] %}
+                            <span class="platform-tag">{{ p }}</span>
+                        {% endfor %}
+                    </td>
+                    <td style="text-align:right"><strong>{{ "{:,}".format(data['views']) }}</strong></td>
+                    <td style="text-align:right">{{ "{:,}".format(data['likes']) }}</td>
+                    <td style="text-align:right">{{ "{:,}".format(data['shares']) }}</td>
+                    <td style="text-align:right">{{ "{:,}".format(data['comments']) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <p class="footer-note">📊 Streamer Agency Campaign Report • Generated {{ project['created_at'][:16] }}</p>
+    <div class="section">
+        <p class="empty">📭 ยังไม่มีข้อมูลสถิติ — รอสตรีมเมอร์ส่งรายงานหลังจบงานครับ</p>
+    </div>
+    {% endif %}
+
+    <p class="footer-note">📊 Streamer Agency Campaign Report • Generated {{ project['created_at'][:16] }}</p>
+</div>
+
+{% if agg %}
+<div id="chartData" style="display:none"
+     data-platforms='{{ agg["by_platform"]|tojson }}'
+     data-streamers='{{ agg["by_streamer"]|tojson }}'
+     data-scopes='{{ agg.get("by_scope", {})|tojson }}'
+     data-views='{{ agg["total_views"] }}'
+     data-likes='{{ agg["total_likes"] }}'
+     data-shares='{{ agg["total_shares"] }}'
+     data-comments='{{ agg["total_comments"] }}'>
+</div>
+<script>
+const el = document.getElementById('chartData');
+const platformData = JSON.parse(el.dataset.platforms);
+const streamerData = JSON.parse(el.dataset.streamers);
+const scopeData = JSON.parse(el.dataset.scopes || '{}');
+const totals = {
+    views: parseInt(el.dataset.views),
+    likes: parseInt(el.dataset.likes),
+    shares: parseInt(el.dataset.shares),
+    comments: parseInt(el.dataset.comments)
+};
+
+// Platform chart (bar)
+const pLabels = Object.keys(platformData);
+const pViews = pLabels.map(p => platformData[p].views);
+const pLikes = pLabels.map(p => platformData[p].likes);
+
+new Chart(document.getElementById('platformChart'), {
+    type: 'bar',
+    data: {
+        labels: pLabels,
+        datasets: [
+            { label: 'Views', data: pViews, backgroundColor: 'rgba(0, 113, 227, 0.8)' },
+            { label: 'Likes', data: pLikes, backgroundColor: 'rgba(255, 59, 48, 0.8)' }
+        ]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'top' } },
+        scales: { y: { beginAtZero: true, ticks: { callback: v => v.toLocaleString() } } }
+    }
+});
+
+// Views pie
+new Chart(document.getElementById('viewsPieChart'), {
+    type: 'doughnut',
+    data: {
+        labels: pLabels,
+        datasets: [{
+            data: pViews,
+            backgroundColor: ['#0071e3', '#34c759', '#ff9500', '#ff3b30', '#af52de', '#5e5ce6', '#ff2d55']
+        }]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'right' } }
+    }
+});
+
+// Streamer views bar
+const sLabels = Object.keys(streamerData);
+const sViews = sLabels.map(s => streamerData[s].views);
+new Chart(document.getElementById('streamerChart'), {
+    type: 'bar',
+    data: {
+        labels: sLabels,
+        datasets: [{ label: 'Views', data: sViews, backgroundColor: 'rgba(94, 92, 230, 0.85)' }]
+    },
+    options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, ticks: { callback: v => v.toLocaleString() } } }
+    }
+});
+
+// Metrics chart
+new Chart(document.getElementById('metricsChart'), {
+    type: 'bar',
+    data: {
+        labels: ['Views', 'Likes', 'Shares', 'Comments'],
+        datasets: [{
+            label: 'Total',
+            data: [totals.views, totals.likes, totals.shares, totals.comments],
+            backgroundColor: ['#0071e3', '#ff3b30', '#34c759', '#ff9500']
+        }]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { callback: v => v.toLocaleString() } } }
+    }
+});
+
+// Scope chart
+if (Object.keys(scopeData).length > 0) {
+    const scLabels = Object.keys(scopeData);
+    const scViews = scLabels.map(s => scopeData[s].views);
+    const scLikes = scLabels.map(s => scopeData[s].likes);
+    new Chart(document.getElementById('scopeChart'), {
+        type: 'bar',
+        data: {
+            labels: scLabels,
+            datasets: [
+                { label: 'Views', data: scViews, backgroundColor: 'rgba(0, 113, 227, 0.8)' },
+                { label: 'Likes', data: scLikes, backgroundColor: 'rgba(255, 59, 48, 0.8)' }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'top' } },
+            scales: { y: { beginAtZero: true, ticks: { callback: v => v.toLocaleString() } } }
+        }
+    });
+}
+</script>
+{% endif %}
+</body>
+</html>

@@ -1,0 +1,23 @@
+# Database — ห้าม commit
+app/agency.db
+app/agency.db-journal
+app/backups/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs
+*.log
+
+# Local env
+.env

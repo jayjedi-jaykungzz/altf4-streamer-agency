@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ALTF4 - Streamer Agency{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='altf4-logo.png') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="{{ url_for('dashboard') }}" class="logo">
+                <img src="{{ url_for('static', filename='altf4-logo.png') }}" alt="ALTF4" class="logo-img">
+                <span class="logo-text">ALTF4</span>
+            </a>
+            {% if current_user %}
+                <div class="nav-right">
+                    <a href="{{ url_for('dashboard') }}" class="nav-link">🚀 Projects</a>
+                    {% if current_user["role"] == "admin" %}
+                    <a href="{{ url_for('annual_report') }}" class="nav-link">📊 สรุปประจำปี</a>
+                    {% endif %}
+                    <button id="themeToggle" class="theme-toggle" title="สลับธีม" aria-label="Toggle theme">
+                        <span class="moon">🌙</span>
+                        <span class="sun">☀️</span>
+                    </button>
+                    <span class="user-info">
+                        <strong>{{ current_user['display_name'] }}</strong>
+                        <span class="role-badge role-{{ current_user['role'] }}">{{ current_user['role'] }}</span>
+                    </span>
+                    <a href="{{ url_for('logout') }}" class="btn btn-ghost">ออกจากระบบ</a>
+                </div>
+            {% else %}
+                <div class="nav-right">
+                    <button id="themeToggle" class="theme-toggle" title="สลับธีม" aria-label="Toggle theme">
+                        <span class="moon">🌙</span>
+                        <span class="sun">☀️</span>
+                    </button>
+                </div>
+            {% endif %}
+        </div>
+    </nav>
+
+    <script>
+    (function() {
+        const html = document.documentElement;
+        const saved = localStorage.getItem('altf4-theme');
+        if (saved === 'dark') html.setAttribute('data-theme', 'dark');
+
+        // Apply on init
+        const apply = (theme) => {
+            if (theme === 'dark') html.setAttribute('data-theme', 'dark');
+            else html.removeAttribute('data-theme');
+            localStorage.setItem('altf4-theme', theme);
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const btn = document.getElementById('themeToggle');
+            if (btn) {
+                btn.addEventListener('click', function() {
+                    const isDark = html.getAttribute('data-theme') === 'dark';
+                    apply(isDark ? 'light' : 'dark');
+                });
+            }
+        });
+    })();
+    </script>
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, msg in messages %}
+                    <div class="flash flash-{{ category }}">{{ msg }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2026 <strong>ALTF4</strong> • Streamer Agency Management</p>
+    </footer>
+</body>
+</html>

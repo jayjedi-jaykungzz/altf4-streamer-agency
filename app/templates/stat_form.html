@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}กรอก Stat{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>📤 กรอก Stat</h1>
+    <a href="{{ url_for('project_detail', project_id=project['id']) }}" class="btn btn-ghost">← กลับ</a>
+</div>
+
+<div class="card">
+    <h2>{{ project['name'] }}</h2>
+    <p class="muted">ลูกค้า: {{ project['client_name'] }}</p>
+
+    <form method="POST" enctype="multipart/form-data" class="form">
+        <div class="form-group">
+            <label>สตรีมเมอร์ *</label>
+            <select name="project_streamer_id" id="ps_select" required onchange="updateScopes()">
+                <option value="">-- เลือกสตรีมเมอร์ --</option>
+                {% for s in project['streamers'] %}
+                    <option value="{{ s['id'] }}" data-scopes='{{ s["scopes"]|tojson }}' {% if request.args.get('ps') == s['id']|string %}selected{% endif %}>
+                        {{ s['streamer_name'] }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group" id="scope-group" style="display:none">
+            <label>Scope of Work *</label>
+            <select name="scope_id" id="scope_select">
+                <option value="">-- เลือก Scope --</option>
+            </select>
+            <small class="muted">เลือก scope ที่ต้องการบันทึก stat</small>
+        </div>
+
+        <div class="form-group">
+            <label>แพลตฟอร์ม *</label>
+            <select name="platform" required>
+                <option value="Facebook">Facebook</option>
+                <option value="Instagram">Instagram</option>
+                <option value="TikTok">TikTok</option>
+                <option value="YouTube">YouTube</option>
+                <option value="Twitch">Twitch</option>
+                <option value="X (Twitter)">X (Twitter)</option>
+                <option value="อื่นๆ">อื่นๆ</option>
+            </select>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>Views</label>
+                <input type="number" name="views" min="0" value="0">
+            </div>
+            <div class="form-group">
+                <label>Likes</label>
+                <input type="number" name="likes" min="0" value="0">
+            </div>
+            <div class="form-group">
+                <label>Shares</label>
+                <input type="number" name="shares" min="0" value="0">
+            </div>
+            <div class="form-group">
+                <label>Comments</label>
+                <input type="number" name="comments" min="0" value="0">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Engagement Rate (%)</label>
+            <input type="number" name="engagement" min="0" max="100" step="0.01" value="0">
+        </div>
+
+        <div class="form-group">
+            <label>หมายเหตุเพิ่มเติม (ไม่บังคับ)</label>
+            <textarea name="extra_data" rows="3" placeholder="ลิงก์โพสต์, หมายเหตุ, ฯลฯ"></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">🚀 บันทึก Stat</button>
+    </form>
+</div>
+
+<script>
+function updateScopes() {
+    const select = document.getElementById('ps_select');
+    const opt = select.options[select.selectedIndex];
+    const scopes = JSON.parse(opt.dataset.scopes || '[]');
+    const scopeGroup = document.getElementById('scope-group');
+    const scopeSelect = document.getElementById('scope_select');
+    scopeSelect.innerHTML = '<option value="">-- เลือก Scope --</option>';
+    if (scopes.length > 0) {
+        scopeGroup.style.display = 'block';
+        scopes.forEach(s => {
+            const o = document.createElement('option');
+            o.value = s.id;
+            o.textContent = `${s.scope_type} (×${s.scope_count})`;
+            scopeSelect.appendChild(o);
+        });
+    } else {
+        scopeGroup.style.display = 'none';
+    }
+}
+// trigger on load ถ้ามี pre-selected
+updateScopes();
+</script>
+{% endblock %}

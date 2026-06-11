@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block title %}สร้างโปรเจ็คใหม่{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>สร้างโปรเจ็คใหม่</h1>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-ghost">← กลับ</a>
+</div>
+
+<div class="card">
+    <form method="POST" id="projectForm" class="form">
+        <div class="form-row">
+            <div class="form-group">
+                <label>ชื่องาน / แคมเปญ *</label>
+                <input type="text" name="name" required placeholder="เช่น Endorsement ครีมกันแดด">
+            </div>
+            <div class="form-group">
+                <label>ชื่อลูกค้า / แบรนด์ *</label>
+                <input type="text" name="client_name" required placeholder="เช่น L'Oreal Thailand">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Agency Fee (%) *</label>
+            <input type="number" name="agency_fee_percent" id="fee" value="30" min="0" max="500" step="1" required oninput="calcTotal()">
+            <small class="muted">กำไรที่ agency จะได้จากต้นทุนรวม</small>
+        </div>
+
+        <hr class="divider">
+
+        <h3>🎥 สตรีมเมอร์ + ต้นทุน + Scope of Work</h3>
+        <small class="muted">แต่ละสตรีมเมอร์สามารถมีหลาย scope เช่น Livestream x3 + Short VDO x2</small>
+
+        <div id="streamerRows"></div>
+        <button type="button" onclick="addRow()" class="btn btn-ghost" style="margin-top: 0.75rem">+ เพิ่มสตรีมเมอร์</button>
+
+        <div class="summary-box">
+            <div class="summary-row">
+                <span>สตรีมเมอร์ที่เพิ่ม:</span>
+                <strong id="selectedCount">0</strong> คน
+            </div>
+            <div class="summary-row">
+                <span>ต้นทุนรวม:</span>
+                <strong id="totalCost">฿0</strong>
+            </div>
+            <div class="summary-row">
+                <span>Agency Fee (<span id="feeDisplay">30</span>%):</span>
+                <strong id="agencyProfit">฿0</strong>
+            </div>
+            <div class="summary-row total">
+                <span>ราคาขาย:</span>
+                <strong id="salePrice">฿0</strong>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>หมายเหตุ / รายละเอียดงาน</label>
+            <textarea name="notes" rows="4" placeholder="ขอบเขตงาน, วันส่งมอบ, etc."></textarea>
+        </div>
+
+        <div class="form-actions">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-ghost">ยกเลิก</a>
+            <button type="submit" class="btn btn-primary">สร้างโปรเจ็ค</button>
+        </div>
+    </form>
+</div>
+
+<style>
+.divider { border: none; border-top: 1px solid var(--border-soft); margin: 1.5rem 0; }
+.streamer-block {
+    background: var(--bg-2);
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--border-soft);
+}
+.streamer-block-header {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+.streamer-block-header .name-field { flex: 1; }
+.streamer-block-header .cost-field { width: 130px; }
+.streamer-block-header select,
+.streamer-block-header input {
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    font-family: inherit;
+    background: var(--card);
+}
+.scope-list {
+    margin-top: 0.5rem;
+    padding-left: 0.5rem;
+    border-left: 3px solid var(--accent);
+}
+.scope-row {
+    display: flex;
+    gap: 0.4rem;
+    margin-bottom: 0.4rem;
+    align-items: center;
+}
+.scope-row select, .scope-row input {
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    background: var(--card);
+}
+.scope-row .type-field { flex: 1; }
+.scope-row .count-field { width: 70px; }
+.scope-row .cost-field { width: 110px; }
+.add-scope-btn {
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--text-2);
+    padding: 0.3rem 0.7rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
+    transition: all 0.15s;
+}
+.add-scope-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+    background: rgba(212, 255, 0, 0.1);
+}
+.remove-btn {
+    background: transparent;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.85rem;
+}
+.remove-btn:hover { background: var(--danger); color: white; }
+.scope-label {
+    font-size: 0.78rem;
+    color: var(--text-2);
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+    display: block;
+}
+.summary-box {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    border: 1px solid var(--border-soft);
+}
+.summary-row { display: flex; justify-content: space-between; padding: 0.35rem 0; font-size: 0.95rem; color: var(--text-2); }
+.summary-row.total { border-top: 1px solid var(--border-soft); margin-top: 0.6rem; padding-top: 0.85rem; font-size: 1.1rem; }
+.summary-row.total strong { color: var(--primary); font-size: 1.5rem; font-weight: 700; }
+.form-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-soft); }
+</style>
+
+<script>
+const roster = {{ roster|tojson }};
+const scopeTypes = {{ scope_types|tojson }};
+let streamerIdx = 0;
+
+function addRow() {
+    const idx = streamerIdx++;
+    const wrap = document.getElementById('streamerRows');
+    const block = document.createElement('div');
+    block.className = 'streamer-block';
+    block.dataset.idx = idx;
+    block.innerHTML = `
+        <div class="streamer-block-header">
+            <input list="roster_${idx}" name="streamer_${idx}" class="name-field" placeholder="ชื่อสตรีมเมอร์" required>
+            <datalist id="roster_${idx}">
+                ${roster.map(n => `<option value="${n}">`).join('')}
+            </datalist>
+            <input type="number" name="cost_${idx}" class="cost-field" step="0.01" min="0" placeholder="ต้นทุนรวม" oninput="calcTotal()">
+            <button type="button" class="remove-btn" onclick="this.closest('.streamer-block').remove(); calcTotal();">✕</button>
+        </div>
+        <span class="scope-label">📋 Scope of Work:</span>
+        <div class="scope-list" data-streamer="${idx}"></div>
+        <button type="button" class="add-scope-btn" onclick="addScope(${idx})">+ เพิ่ม Scope</button>
+    `;
+    wrap.appendChild(block);
+    // เพิ่ม 1 scope เริ่มต้น
+    addScope(idx);
+    block.querySelector('input[name^="streamer_"]').focus();
+}
+
+let scopeCounters = {};
+function addScope(streamerIdxVal) {
+    if (!scopeCounters[streamerIdxVal]) scopeCounters[streamerIdxVal] = 0;
+    const sidx = scopeCounters[streamerIdxVal]++;
+    const list = document.querySelector(`.scope-list[data-streamer="${streamerIdxVal}"]`);
+    const row = document.createElement('div');
+    row.className = 'scope-row';
+    row.innerHTML = `
+        <select name="scope_type_${streamerIdxVal}_${sidx}" class="type-field" onchange="calcTotal()">
+            ${scopeTypes.map(t => `<option value="${t}">${t}</option>`).join('')}
+        </select>
+        <span style="color: var(--muted); font-size: 0.85rem;">×</span>
+        <input type="number" name="scope_count_${streamerIdxVal}_${sidx}" class="count-field" value="1" min="1" step="1" oninput="calcTotal()">
+        <span style="color: var(--muted); font-size: 0.85rem;">×</span>
+        <input type="number" name="scope_cost_${streamerIdxVal}_${sidx}" class="cost-field" step="0.01" min="0" placeholder="บาท/ครั้ง" oninput="calcTotal()">
+        <span style="color: var(--muted); font-size: 0.85rem;">บาท</span>
+        <button type="button" class="remove-btn" style="padding: 0.3rem 0.6rem;" onclick="this.parentElement.remove(); calcTotal()">✕</button>
+    `;
+    list.appendChild(row);
+}
+
+function calcTotal() {
+    const fee = parseFloat(document.getElementById('fee').value) || 0;
+    document.getElementById('feeDisplay').textContent = fee;
+    let totalCost = 0, selected = 0;
+    document.querySelectorAll('.streamer-block').forEach(block => {
+        const name = block.querySelector('input[name^="streamer_"]').value.trim();
+        const costField = block.querySelector('input[name^="cost_"]');
+
+        // คำนวน cost รวมจาก scope (cost_per_unit × count)
+        let scopeCost = 0;
+        block.querySelectorAll('.scope-row').forEach(scopeRow => {
+            const count = parseFloat(scopeRow.querySelector('input[name*="scope_count"]')?.value) || 0;
+            const cost = parseFloat(scopeRow.querySelector('input[name*="scope_cost"]')?.value) || 0;
+            scopeCost += count * cost;
+        });
+
+        // ถ้า user พิมพ์ cost ตรงๆ ให้ใช้ค่านั้น (อาจรวม overhead)
+        // ถ้าไม่พิมพ์ ให้ใช้ scopeCost
+        const directCost = parseFloat(costField.value) || 0;
+        const finalCost = directCost > 0 ? directCost : scopeCost;
+        costField.dataset.calculated = scopeCost;
+        if (!document.activeElement || document.activeElement !== costField) {
+            // แสดง cost คำนวนใน placeholder แต่ไม่ overwrite ถ้า user กำลังพิมพ์
+            costField.placeholder = directCost > 0 ? '' : `อัตโนมัติ: ${scopeCost.toLocaleString('th-TH', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
+        }
+
+        if (name) {
+            selected++;
+            totalCost += finalCost;
+        }
+    });
+    const profit = totalCost * (fee / 100);
+    const sale = totalCost + profit;
+    document.getElementById('selectedCount').textContent = selected;
+    document.getElementById('totalCost').textContent = '฿' + totalCost.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    document.getElementById('agencyProfit').textContent = '฿' + profit.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    document.getElementById('salePrice').textContent = '฿' + sale.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+addRow();
+</script>
+{% endblock %}
