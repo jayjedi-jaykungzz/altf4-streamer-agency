@@ -8,7 +8,7 @@ import datetime
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort
 
-from models import (
+from .models import (
     init_db, verify_user, get_user_by_id, list_staff,
     STREAMER_ROSTER, get_scope_types, add_scopes_to_streamer,
     list_projects, get_project, create_project, update_project_sale, update_project_status,
