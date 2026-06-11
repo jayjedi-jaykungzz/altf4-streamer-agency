@@ -84,6 +84,47 @@ def login_required(f):
     return wrapper
 
 
+# ===== Debug endpoints (ชั่วคราว — debug Render issue) =====
+@app.errorhandler(500)
+def internal_error(error):
+    """แสดง traceback เพื่อ debug"""
+    import traceback
+    return f"<h1>500 Internal Server Error</h1><pre>{traceback.format_exc()}</pre>", 500
+
+
+@app.route('/health')
+def health():
+    """ตรวจสถานะ app + DB"""
+    import os
+    from models import get_db, DB_PATH
+    info = {
+        'app': 'OK',
+        'db_path': DB_PATH,
+        'db_exists': os.path.exists(DB_PATH),
+        'env_DATABASE_PATH': os.environ.get('DATABASE_PATH', 'NOT SET'),
+    }
+    try:
+        conn = get_db()
+        info['users'] = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()['c']
+        info['projects'] = conn.execute("SELECT COUNT(*) AS c FROM projects").fetchone()['c']
+        conn.close()
+    except Exception as e:
+        info['db_error'] = str(e)
+    return info
+
+
+@app.route('/debug-login')
+def debug_login():
+    """ทดสอบ login + redirect (ชั่วคราว)"""
+    from flask import jsonify
+    info = {
+        'current_user': current_user(),
+        'session': dict(session),
+    }
+    return jsonify(info)
+
+
+
 def admin_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
