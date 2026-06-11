@@ -28,7 +28,7 @@ git push -u origin main
    - **Region:** Singapore
    - **Branch:** `main`
    - **Build Command:** `pip install -r requirements.txt`
-   - **Start Command:** `gunicorn app.main:app --bind 0.0.0.0:$PORT`
+   - **Start Command:** `waitress-serve --host=0.0.0.0 --port=$PORT app.main:app`
    - **Plan:** Free
 
 ### 4. ตั้ง Environment Variables
