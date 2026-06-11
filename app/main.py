@@ -8,19 +8,35 @@ import datetime
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort
 
-from .models import (
-    init_db, verify_user, get_user_by_id, list_staff,
-    STREAMER_ROSTER, get_scope_types, add_scopes_to_streamer,
-    list_projects, get_project, create_project, update_project_sale, update_project_status,
-    create_stat_report, list_stats_for_project, delete_stat_report,
-    aggregate_project_stats,
-    STATUS_LABELS, STATUS_CODES,
-    get_annual_report, list_years_with_projects,
-    auto_cancel_stale_quotes
-)
+# ใช้ absolute import — work ทั้ง local (python main.py) และ production (waitress/gunicorn)
+try:
+    from .models import (
+        init_db, verify_user, get_user_by_id, list_staff,
+        STREAMER_ROSTER, get_scope_types, add_scopes_to_streamer,
+        list_projects, get_project, create_project, update_project_sale, update_project_status,
+        create_stat_report, list_stats_for_project, delete_stat_report,
+        aggregate_project_stats,
+        STATUS_LABELS, STATUS_CODES,
+        get_annual_report, list_years_with_projects,
+        auto_cancel_stale_quotes
+    )
+except ImportError:
+    # Fallback สำหรับ local dev (python main.py ตรงๆ)
+    from models import (
+        init_db, verify_user, get_user_by_id, list_staff,
+        STREAMER_ROSTER, get_scope_types, add_scopes_to_streamer,
+        list_projects, get_project, create_project, update_project_sale, update_project_status,
+        create_stat_report, list_stats_for_project, delete_stat_report,
+        aggregate_project_stats,
+        STATUS_LABELS, STATUS_CODES,
+        get_annual_report, list_years_with_projects,
+        auto_cancel_stale_quotes
+    )
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'change-me-in-production-please-jay-2026')
+# เปิด debug เฉพาะตอน develop — Render ตั้ง FLASK_DEBUG=0
+app.config['DEBUG'] = os.environ.get('FLASK_DEBUG', '0') == '1'
 
 
 # ===== Auto cancel stale quotes (เสนอราคา > 5 เดือน → ยกเลิก) =====
