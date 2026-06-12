@@ -1,6 +1,7 @@
 """
 Seed 25 โปรเจคสมมติ + scopes + stat reports
 """
+import os
 import sqlite3
 import random
 import datetime
