@@ -1,15 +1,13 @@
 """
 Seed 25 โปรเจคสมมติ + scopes + stat reports
 """
-import sys
-import os
+import sqlite3
 import random
 import datetime
-sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
+# Relative imports (จะรันจาก app/ folder)
 from models import init_db, get_db, SCOPE_TYPES, get_db_path
 
-# ใช้ DB path จาก env var (Render: /tmp/agency.db, local: app/agency.db)
 DB_PATH = get_db_path()
 if os.path.exists(DB_PATH):
     os.remove(DB_PATH)

@@ -1,57 +1,40 @@
 """
-Seed database for production (idempotent — safe to run multiple times)
-
-ใช้ตอน Render deploy ครั้งแรก: รัน auto ผ่าน wsgi.py
+Seed database for production (idempotent — safe to run many times)
+ใช้: wsgi.py เรียกจาก startup
 """
 import os
 import sys
 import sqlite3
-import random
-import datetime
-
-DB_PATH = os.environ.get('DATABASE_PATH', '/tmp/agency.db')
 
 
 def auto_seed():
-    """ตรวจและ seed ถ้ายังว่าง (idempotent)"""
-    print(f'🔍 Checking DB at: {DB_PATH}')
-    print(f'   exists: {os.path.exists(DB_PATH)}')
+    """Seed DB ถ้ายังว่าง (idempotent)"""
+    from models import init_db, get_db, get_db_path
 
-    # สร้าง DB + tables ผ่าน init_db ของ models
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from models import init_db, get_db
+    db_path = get_db_path()
+    print(f'🔍 Checking DB at: {db_path}')
+    print(f'   exists: {os.path.exists(db_path)}')
+
+    try:
+        conn = sqlite3.connect(db_path)
+        user_count = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()[0]
+        conn.close()
+        if user_count > 0:
+            print(f'✅ DB already seeded ({user_count} users) — skip')
+            return
+    except sqlite3.OperationalError:
+        print(f'🌱 No DB found — initializing...')
+
+    print('🌱 Seeding database...')
     init_db()
-
-    conn = get_db()
-    user_count = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()['c']
-    project_count = conn.execute("SELECT COUNT(*) AS c FROM projects").fetchone()['c']
-    conn.close()
-
-    print(f'   users: {user_count}, projects: {project_count}')
-
-    if user_count > 0:
-        print('✅ DB already seeded — skip')
-        return
-
-    print('🌱 First run — seeding database (this takes ~10 seconds)...')
-    _do_seed()
-
-    # Verify
-    conn = get_db()
-    final_users = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()['c']
-    final_projects = conn.execute("SELECT COUNT(*) AS c FROM projects").fetchone()['c']
-    conn.close()
-    print(f'✅ Seed complete! {final_users} users, {final_projects} projects')
-
-
-def _do_seed():
-    """Seed users + projects"""
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    # Import seed_demo เพื่อ seed ข้อมูล
     import seed_demo
-    # seed_demo.py จะ:
-    # 1. ลบ DB เก่า (ถ้ามี)
-    # 2. init_db() ใหม่
-    # 3. seed users + projects + scopes + stats
+
+    conn = sqlite3.connect(db_path)
+    user_count = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()[0]
+    project_count = conn.execute("SELECT COUNT(*) AS c FROM projects").fetchone()[0]
+    conn.close()
+    print(f'✅ Seed complete! {user_count} users, {project_count} projects')
 
 
 if __name__ == '__main__':

@@ -6,35 +6,47 @@ Auto-seeds database on first startup (idempotent).
 """
 import os
 import sys
+import sqlite3
 
-# บังคับ DATABASE_PATH ก่อน import models
-os.environ.setdefault('DATABASE_PATH', '/tmp/agency.db')
+# เลือก DB path ตามสภาพแวดล้อม
+if os.path.exists('/tmp'):
+    os.environ['DATABASE_PATH'] = '/tmp/agency.db'
+else:
+    # Local dev (Windows) ใช้ app/agency.db
+    os.environ['DATABASE_PATH'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app', 'agency.db')
 
-# เพิ่ม ROOT (ที่มี app/ folder) เข้า Python path — เพื่อให้ import app.main ได้
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT_DIR)
-
-# เปลี่ยน working directory เป็น app folder
 APP_DIR = os.path.join(ROOT_DIR, 'app')
 os.chdir(APP_DIR)
 
 print(f'📁 Working dir: {os.getcwd()}')
 print(f'📁 Database path: {os.environ.get("DATABASE_PATH")}')
 
-# Auto-seed on first startup
+# ===== AUTO-SEED =====
+db_path = os.environ['DATABASE_PATH']
+needs_seed = False
+
 try:
+    conn = sqlite3.connect(db_path)
+    user_count = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()[0]
+    conn.close()
+    if user_count > 0:
+        print(f'✅ DB ready ({user_count} users)')
+    else:
+        print(f'DB exists but empty — seeding...')
+        needs_seed = True
+except sqlite3.OperationalError:
+    print(f'🌱 No DB found — initializing + seeding...')
+    needs_seed = True
+
+if needs_seed:
+    print('🌱 Seeding database...')
     from seed_for_prod import auto_seed
     auto_seed()
-except Exception as e:
-    print(f'⚠️  Seed error: {e}', file=sys.stderr)
-    import traceback
-    traceback.print_exc()
+    print('✅ Seed done!')
 
-# Import Flask app ผ่าน app.main package — work กับ relative import
+# ===== Import Flask app =====
+print('🔗 Importing Flask app...')
 from app.main import app as application
-
-if __name__ == '__main__':
-    from waitress import serve
-    port = int(os.environ.get('PORT', 5000))
-    print(f'🚀 Starting waitress on port {port}')
-    serve(application, host='0.0.0.0', port=port)
+print('🚀 Server ready!')

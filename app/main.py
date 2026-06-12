@@ -92,16 +92,39 @@ def internal_error(error):
     return f"<h1>500 Internal Server Error</h1><pre>{traceback.format_exc()}</pre>", 500
 
 
+@app.route('/force-seed', methods=['GET', 'POST'])
+def force_seed():
+    """บังคับ seed DB (idempotent — safe to run many times)"""
+    import os
+    os.environ['DATABASE_PATH'] = '/tmp/agency.db'
+
+    # ลบ import cache
+    import sys
+    for mod in list(sys.modules.keys()):
+        if 'models' in mod or 'main' in mod or 'seed' in mod:
+            del sys.modules[mod]
+
+    import os
+    APP_DIR = '/opt/render/project/src/app'
+    os.chdir(APP_DIR)
+    sys.path.insert(0, '/opt/render/project/src')
+
+    from app.seed_for_prod import auto_seed
+    auto_seed()
+    return f"✅ Seed completed. <a href='/health'>Check /health</a>"
+
+
 @app.route('/health')
 def health():
     """ตรวจสถานะ app + DB"""
     import os
-    from models import get_db, DB_PATH
+    from app.models import get_db, get_db_path
     info = {
         'app': 'OK',
-        'db_path': DB_PATH,
-        'db_exists': os.path.exists(DB_PATH),
+        'db_path': get_db_path(),
+        'db_exists': os.path.exists(get_db_path()),
         'env_DATABASE_PATH': os.environ.get('DATABASE_PATH', 'NOT SET'),
+        'cwd': os.getcwd(),
     }
     try:
         conn = get_db()
