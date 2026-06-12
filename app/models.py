@@ -436,8 +436,10 @@ def get_annual_report(year):
         ORDER BY ps.streamer_name, sc.scope_type
     ''', project_ids).fetchall()
 
-    # ----- คำนวน P&L รวม -----
-    total_cost = sum(p['total_cost'] if False else 0 for p in projects)  # คำนวนจาก ps
+    # ----- คำนวน P&L รวม (จาก scope เพื่อไม่นับ cost ซ้ำต่อ streamer) -----
+    # หลักการ: 1 project มี 1 sale_price (จาก scope รวม) + 1 cost (รวมทุก scope ทุก streamer)
+    # ห้ามนับ cost ต่อ streamer เพราะจะซ้ำ
+
     total_cost = 0
     total_revenue = 0
     by_streamer = {}     # {streamer_name: {cost, revenue, profit, projects: [...]}}
@@ -445,64 +447,98 @@ def get_annual_report(year):
     by_status = {}       # {status_code: {count, cost, revenue, profit}}
     by_streamer_scope = {}  # {streamer_name: {scope_type: {cost, revenue, profit, count}}}
 
+    # สร้าง dict: project_id → (total_cost, total_revenue)
+    project_costs = {}  # {project_id: total_cost}
+    project_revenues = {}  # {project_id: total_revenue}
+
+    # คำนวณ cost/revenue ต่อ project จาก scope (ไม่ซ้ำ)
+    for sc in scope_rows:
+        pid = sc['project_id']
+        scope_cost = (sc['cost_per_unit'] or 0) * sc['scope_count']
+        project_costs[pid] = project_costs.get(pid, 0) + scope_cost
+
+    # ใส่ revenue โดยใช้ fee ของ project
+    for p in projects:
+        pid = p['id']
+        if pid in project_costs:
+            fee = p['agency_fee_percent'] / 100.0
+            project_revenues[pid] = project_costs[pid] * (1 + fee)
+        else:
+            project_costs[pid] = 0
+            project_revenues[pid] = 0
+
+    # รวมเข้า by_streamer (แบ่งตามจำนวน streamer)
     for ps in ps_rows:
         ps = dict(ps)
         sname = ps['streamer_name']
         client = ps['client_name']
         status = ps['status']
-        fee = ps['agency_fee_percent'] / 100.0
-        cost = ps['cost']
-        # revenue = cost * (1 + fee)  (ถ้ามี sale_price_override ที่ project level จะคำนวนต่างหาก)
-        revenue = cost * (1 + fee)
+        pid = ps['project_id']
+
+        # แบ่ง cost/revenue ตามสัดส่วน streamer
+        # ดูว่า project นี้มีกี่ streamer
+        n_streamers_in_proj = sum(1 for p2 in ps_rows if p2['project_id'] == pid)
+        if n_streamers_in_proj == 0:
+            continue
+
+        cost_share = project_costs[pid] / n_streamers_in_proj
+        revenue_share = project_revenues[pid] / n_streamers_in_proj
 
         # by_streamer
         if sname not in by_streamer:
             by_streamer[sname] = {'cost': 0, 'revenue': 0, 'profit': 0, 'projects': [], 'project_count': 0, 'scope_count': 0}
-        by_streamer[sname]['cost'] += cost
-        by_streamer[sname]['revenue'] += revenue
-        by_streamer[sname]['profit'] += revenue - cost
-        if ps['project_id'] not in [pr['id'] for pr in by_streamer[sname]['projects']]:
-            by_streamer[sname]['projects'].append({'id': ps['project_id'], 'name': next((p['name'] for p in projects if p['id'] == ps['project_id']), ''), 'client': client, 'status': status})
-            by_streamer[sname]['project_count'] += 1
+        by_streamer[sname]['cost'] += cost_share
+        by_streamer[sname]['revenue'] += revenue_share
+        by_streamer[sname]['profit'] += revenue_share - cost_share
+        if not any(p['id'] == pid for p in by_streamer[sname]['projects']):
+            proj = next((p for p in projects if p['id'] == pid), None)
+            if proj:
+                by_streamer[sname]['projects'].append({
+                    'id': pid,
+                    'name': proj['name'],
+                    'client': client,
+                    'status': status
+                })
+                by_streamer[sname]['project_count'] += 1
 
-        # by_client
+        # by_client (นับ unique project)
         if client not in by_client:
             by_client[client] = {'cost': 0, 'revenue': 0, 'profit': 0, 'project_count': 0}
-        by_client[client]['cost'] += cost
-        by_client[client]['revenue'] += revenue
-        by_client[client]['profit'] += revenue - cost
-        # project_count: นับ unique project_id
-        if not any(p.get('added') for p in by_client[client].get('_seen', [])):
-            pass
-        # ใช้ set เก็บ project_id ที่นับแล้ว
-        by_client[client].setdefault('_seen_ids', set()).add(ps['project_id'])
+        by_client[client].setdefault('_seen_ids', set()).add(pid)
 
         # by_status
         if status not in by_status:
             by_status[status] = {'count': 0, 'cost': 0, 'revenue': 0, 'profit': 0, 'project_ids': set()}
-        by_status[status]['cost'] += cost
-        by_status[status]['revenue'] += revenue
-        by_status[status]['profit'] += revenue - cost
-        by_status[status]['project_ids'].add(ps['project_id'])
+        by_status[status]['project_ids'].add(pid)
 
-        total_cost += cost
-        total_revenue += revenue
+        total_cost += cost_share
+        total_revenue += revenue_share
 
-    # คำนวน project_count ของ by_client + เปลี่ยน set → count
+    # คำนวณ project_count และ cost/revenue รวมต่อ client (นับ unique)
     for cname in by_client:
-        by_client[cname]['project_count'] = len(by_client[cname].pop('_seen_ids'))
+        seen_ids = by_client[cname].pop('_seen_ids')
+        by_client[cname]['project_count'] = len(seen_ids)
+        # cost/revenue ใช้ full project cost/revenue (ไม่หาร)
+        for pid in seen_ids:
+            by_client[cname]['cost'] += project_costs.get(pid, 0)
+            by_client[cname]['revenue'] += project_revenues.get(pid, 0)
+        by_client[cname]['profit'] = by_client[cname]['revenue'] - by_client[cname]['cost']
 
-    # นับ project count ใน by_status
+    # นับ project count + cost/revenue ใน by_status (full project)
     for sc in by_status:
-        by_status[sc]['count'] = len(by_status[sc].pop('project_ids'))
+        pids = by_status[sc].pop('project_ids')
+        by_status[sc]['count'] = len(pids)
+        for pid in pids:
+            by_status[sc]['cost'] += project_costs.get(pid, 0)
+            by_status[sc]['revenue'] += project_revenues.get(pid, 0)
+        by_status[sc]['profit'] = by_status[sc]['revenue'] - by_status[sc]['cost']
 
-    # ----- by_streamer x project (แทน by_streamer x scope เดิม) -----
+    # ----- by_streamer x project (ใช้ project_costs เพื่อไม่นับซ้ำ) -----
     # โครงสร้าง: {streamer_name: [{project_id, project_name, client_name, status, cost, revenue, profit, scope_count, scope_summary}, ...]}
     by_streamer_project = {}  # {streamer_name: [project_dict, ...]}
     streamer_project_set = {}  # เก็บ unique (streamer, project_id) เพื่อหลีกเลี่ยงนับซ้ำ
 
-    # scope_rows เดิมเก็บ 1 row = 1 scope
-    # เปลี่ยนเป็น group by (streamer, project) แล้วรวม scope เป็น summary string
+    # ใช้ project_costs/project_revenues ที่คำนวณแล้ว
     for sc in scope_rows:
         sc = dict(sc)
         sname = sc['streamer_name']
@@ -510,7 +546,6 @@ def get_annual_report(year):
         client = sc['client_name']
         proj = next((p for p in projects if p['id'] == project_id), None)
         if not proj: continue
-        fee = proj['agency_fee_percent'] / 100.0
 
         key = (sname, project_id)
         if key not in streamer_project_set:
@@ -519,20 +554,17 @@ def get_annual_report(year):
                 'project_name': proj['name'],
                 'client_name': client,
                 'status': proj['status'],
-                'cost': 0, 'revenue': 0, 'profit': 0,
+                'cost': project_costs.get(project_id, 0),
+                'revenue': project_revenues.get(project_id, 0),
+                'profit': project_revenues.get(project_id, 0) - project_costs.get(project_id, 0),
                 'scope_count': 0,
                 'scope_summary': [],
             }
-        entry = streamer_project_set[key]
-        scope_cost = (sc['cost_per_unit'] or 0) * sc['scope_count']
-        entry['cost'] += scope_cost
-        entry['revenue'] += scope_cost * (1 + fee)
-        entry['scope_count'] += sc['scope_count']
-        entry['scope_summary'].append(f"{sc['scope_type']} ×{sc['scope_count']}")
+        streamer_project_set[key]['scope_count'] += sc['scope_count']
+        streamer_project_set[key]['scope_summary'].append(f"{sc['scope_type']} ×{sc['scope_count']}")
 
     # คำนวน profit และจัดกลุ่มตาม streamer
     for (sname, pid), entry in streamer_project_set.items():
-        entry['profit'] = entry['revenue'] - entry['cost']
         entry['scope_summary_str'] = ', '.join(entry['scope_summary'])
         by_streamer_project.setdefault(sname, []).append(entry)
 
@@ -548,23 +580,16 @@ def get_annual_report(year):
     top_streamers = sorted(by_streamer.items(), key=lambda x: x[1]['profit'], reverse=True)
     top_clients = sorted(by_client.items(), key=lambda x: x[1]['revenue'], reverse=True)
 
-    # ----- Monthly breakdown -----
+    # ----- Monthly breakdown (ใช้ project_costs/revenues เพื่อไม่นับซ้ำ) -----
     monthly = {}
     for p in projects:
         month = p['created_at'][:7]  # '2026-01'
         if month not in monthly:
             monthly[month] = {'cost': 0, 'revenue': 0, 'profit': 0, 'project_count': 0}
         monthly[month]['project_count'] += 1
+        monthly[month]['cost'] += project_costs.get(p['id'], 0)
+        monthly[month]['revenue'] += project_revenues.get(p['id'], 0)
 
-    # รวม cost/revenue ต่อเดือน
-    for ps in ps_rows:
-        ps = dict(ps)
-        p = next((p for p in projects if p['id'] == ps['project_id']), None)
-        if not p: continue
-        month = p['created_at'][:7]
-        fee = ps['agency_fee_percent'] / 100.0
-        monthly[month]['cost'] += ps['cost']
-        monthly[month]['revenue'] += ps['cost'] * (1 + fee)
     for m in monthly:
         monthly[m]['profit'] = monthly[m]['revenue'] - monthly[m]['cost']
 

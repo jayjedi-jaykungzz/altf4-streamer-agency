@@ -10,6 +10,17 @@ import datetime
 from models import init_db, get_db, SCOPE_TYPES, get_db_path
 
 DB_PATH = get_db_path()
+
+# เช็คว่ามี projects อยู่แล้วหรือไม่ (idempotent)
+if os.path.exists(DB_PATH):
+    conn = sqlite3.connect(DB_PATH)
+    existing_p = conn.execute("SELECT COUNT(*) AS c FROM projects").fetchone()[0]
+    conn.close()
+    if existing_p > 0:
+        print(f'⏭️  DB already has {existing_p} projects — skip seed_demo (use seed_more.py to add more)')
+        import sys
+        sys.exit(0)
+
 if os.path.exists(DB_PATH):
     os.remove(DB_PATH)
     print(f'🗑️  Old DB removed: {DB_PATH}')
