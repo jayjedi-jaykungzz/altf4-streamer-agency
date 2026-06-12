@@ -159,6 +159,12 @@ for client_name, topic in NEW_CLIENTS:
             s_cost += price_per_unit * count
         # ต้นทุนรวมของ streamer (จาก cost ratio)
         actual_cost = calc_cost(s_cost, project_scopes[0] if project_scopes else 'Short VDO')
+
+        # ป้องกันชื่อผิด: ตรวจว่า sname อยู่ใน STREAMER_ROSTER
+        if sname not in streamers:
+            print(f'⚠️  Invalid streamer name: "{sname}" — using fallback')
+            sname = random.choice(streamers)
+
         streamer_scopes.append({
             'name': sname,
             'cost': actual_cost,

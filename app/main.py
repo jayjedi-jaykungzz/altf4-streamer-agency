@@ -114,6 +114,54 @@ def force_seed():
     return f"✅ Seed completed. <a href='/health'>Check /health</a>"
 
 
+@app.route('/fix-streamers', methods=['GET', 'POST'])
+def fix_streamers():
+    """แก้ streamer_name ที่เป็น client_name (เกิดจาก seed bug) ให้กลับเป็นชื่อ streamer จริง"""
+    import os, random
+    from app.models import get_db, STREAMER_ROSTER
+
+    conn = get_db()
+
+    # หา streamer_name ทั้งหมด
+    all_streamers = [r['streamer_name'] for r in conn.execute(
+        "SELECT DISTINCT streamer_name FROM project_streamers"
+    ).fetchall()]
+
+    # แยก valid vs invalid
+    valid = [s for s in all_streamers if s in STREAMER_ROSTER]
+    invalid = [s for s in all_streamers if s not in STREAMER_ROSTER]
+
+    if not invalid:
+        conn.close()
+        return f"✅ ไม่มีชื่อผิด — ทั้ง {len(valid)} ชื่อ valid ทั้งหมด"
+
+    # Map: invalid name → replacement (round-robin เพื่อไม่ให้ซ้ำ)
+    fixed = 0
+    replacements = {}
+    for idx, inv_name in enumerate(invalid):
+        new_name = STREAMER_ROSTER[idx % len(STREAMER_ROSTER)]
+        replacements[inv_name] = new_name
+
+    # Update DB
+    for inv_name, new_name in replacements.items():
+        c = conn.execute(
+            "UPDATE project_streamers SET streamer_name = ? WHERE streamer_name = ?",
+            (new_name, inv_name)
+        )
+        fixed += c.rowcount
+
+    conn.commit()
+    conn.close()
+
+    result = f"✅ แก้ {fixed} records<br><br>"
+    result += "<h3>📋 Replacements:</h3><ul>"
+    for inv, new in replacements.items():
+        result += f"<li><code>{inv}</code> → <code>{new}</code></li>"
+    result += "</ul>"
+    result += f"<br><a href='/annual'>ดู Annual Report</a>"
+    return result
+
+
 @app.route('/health')
 def health():
     """ตรวจสถานะ app + DB"""
